@@ -28,15 +28,84 @@ const generateAccessAndRefreshToken = async (userId) => {
   }
 };
 
-const registerUser = asyncHandler(async (req, res) => {
-  const { phoneNumber, email, fullName, password } = req.body;
+// const registerUser = asyncHandler(async (req, res) => {
+//   const { phoneNumber, email, fullName, password } = req.body;
 
-  if (
-    [fullName, email, phoneNumber, password].some(
-      (field) => field?.trim() === ""
-    )
-  ) {
-    throw new apiError(400, "All fields are required !");
+//   try {
+//     if (
+//       [fullName, email, phoneNumber, password].some(
+//         (field) => field?.trim() === ""
+//       )
+//     ) {
+//       throw new apiError(400, "All fields are required !");
+//     }
+
+//     const existedUser = await User.findOne({
+//       $or: [{ phoneNumber }, { email }],
+//     });
+
+//     if (existedUser) {
+//       throw new apiError(409, "User with email or PhoneNumber already exists");
+//     }
+
+//     const user = await User.create({
+//       fullName,
+//       email,
+//       password,
+//       phoneNumber,
+//       ref_id: generateReferralId(),
+//       ref_by: req.body.ref_by || null,
+//     });
+
+//     if (user.ref_by) {
+//       const referrer = await User.findOne({ ref_id: req.body.ref_by });
+//       const firstAmountDoc = await ReferAmount.findOne(
+//         {},
+//         { amount: 1, _id: 0 }
+//       ).sort({ createdAt: 1 });
+//       if (referrer) {
+//         referrer.walletBalance += firstAmountDoc?.amount || 0; // Add the refer amount to referrer's wallet
+//         await referrer.save();
+//       }
+//     }
+
+//     const emailOTP = generateOTP();
+
+//     await otpLogs.create({
+//       userId: user._id,
+//       emailOTP,
+//       expiresAt: new Date(Date.now() + 10 * 60 * 1000), // expires in 10 minutes
+//       verified: false,
+//     });
+
+//     await sendEmail(email, emailOTP);
+
+//     const createdUser = await User.findById(user._id).select(
+//       "-password -refreshToken"
+//     );
+
+//     if (!createdUser) {
+//       throw new apiError(
+//         500,
+//         "Something went wrong while registering the user"
+//       );
+//     }
+//     return res
+//       .status(201)
+//       .json(
+//         new apiResponse(200, createdUser, "✅ User registered Successfully")
+//       );
+//   } catch (err) {
+//     console.log(err);
+//     throw err;
+//   }
+// });
+
+const registerUser = asyncHandler(async (req, res) => {
+  const { phoneNumber, email, fullName, password, ref_by } = req.body;
+
+  if ([fullName, email, phoneNumber, password].some((f) => !f?.trim())) {
+    throw new apiError(400, "All fields are required!");
   }
 
   const existedUser = await User.findOne({
@@ -44,7 +113,7 @@ const registerUser = asyncHandler(async (req, res) => {
   });
 
   if (existedUser) {
-    throw new apiError(409, "User with email or username already exists");
+    throw new apiError(409, "User with email or PhoneNumber already exists");
   }
 
   const user = await User.create({
@@ -53,31 +122,39 @@ const registerUser = asyncHandler(async (req, res) => {
     password,
     phoneNumber,
     ref_id: generateReferralId(),
-    ref_by: req.body.ref_by || null,
+    ref_by: ref_by || null,
   });
 
+  // Handle referral bonus
   if (user.ref_by) {
-    const referrer = await User.findOne({ ref_id: req.body.ref_by });
-    const firstAmountDoc = await ReferAmount.findOne(
-      {},
-      { amount: 1, _id: 0 }
-    ).sort({ createdAt: 1 });
+    const referrer = await User.findOne({ ref_id: ref_by });
     if (referrer) {
-      referrer.walletBalance += firstAmountDoc?.amount || 0; // Add the refer amount to referrer's wallet
+      const firstAmountDoc = await ReferAmount.findOne(
+        {},
+        { amount: 1, _id: 0 }
+      ).sort({ createdAt: 1 });
+      referrer.walletBalance += firstAmountDoc?.amount || 0;
       await referrer.save();
     }
   }
 
+  // Create OTP
   const emailOTP = generateOTP();
-
   await otpLogs.create({
     userId: user._id,
     emailOTP,
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000), // expires in 10 minutes
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     verified: false,
   });
 
-  await sendEmail(email, `${emailOTP}`);
+  // Send OTP email (with error catch so it doesn't break registration)
+  try {
+    await sendEmail(email, emailOTP);
+  } catch (err) {
+    console.log("❌ Failed to send OTP email:", err.message);
+    await User.findByIdAndDelete(user._id);
+    throw new apiError(500, "Failed to send OTP email. Please try again.");
+  }
 
   const createdUser = await User.findById(user._id).select(
     "-password -refreshToken"
@@ -86,10 +163,10 @@ const registerUser = asyncHandler(async (req, res) => {
   if (!createdUser) {
     throw new apiError(500, "Something went wrong while registering the user");
   }
-  // /referral-link/:userId
+
   return res
     .status(201)
-    .json(new apiResponse(200, createdUser, "✅ User registered Successfully"));
+    .json(new apiResponse(201, createdUser, "✅ User registered Successfully"));
 });
 
 const createReferralLink = asyncHandler(async (req, res) => {

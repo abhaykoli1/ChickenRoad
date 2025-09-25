@@ -52,9 +52,7 @@ app.use("/api/v1/otp", otpRouter);
 app.use("/api/v1/wallet", walletRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/chicken-road", chickenGameRouter);
-
 app.use("/api/v1/upi", paymentRouter);
-
 app.use("/api/v1/telegram", telegramRoute);
 app.use("/api/v1/qrcode", qrRoute);
 app.use("/api/v1/qrcodecrypto", qrRouteCrypto);

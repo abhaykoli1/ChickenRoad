@@ -58,7 +58,7 @@ const prompt = (query) =>
     try {
       await client.start({
         phoneNumber: async () => {
-          const phone = config.telegramPhone;
+          const phone = "+917357298846";
           if (!phone.match(/^\+\d{10,12}$/)) {
             console.log("❌ Invalid phone number format. Use +91XXXXXXXXXX");
             process.exit(1);
